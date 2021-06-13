@@ -1,5 +1,7 @@
 import win32com.client
 import pythoncom
+import configparser
+import os
 
 """
 자주 사용하는 api 메서드에 대해서만 잘 작동하도록 구성하였음(실시간 시세조회, 전체 종목조회 등)
@@ -7,58 +9,31 @@ import pythoncom
 """
 
 # 기본 설정
-class Settings:
+class Config:
     """
-    전역 설정 클래스
-    # todo: 멀티프로세스 환경에서 .res 파일 디렉토리 변경시 제대로 설정 안들어갈듯. *\
-    # todo: 공유메모리에 Settings()의 인스턴스를 적재해야할텐데...
+    config.ini 파일 관련 클래스
 
     Attributes:
-        res_directory: .res 파일이 위치한 디렉토리(str)
-        event_XASession: XASession 클래스의 기본 이벤트 핸들러(class)
-        event_XAQuery: XAQuery 클래스의 기본 이벤트 핸들러(class)
-        event_XAReal: XAReal 클래스의 기본 이벤트 핸들러(class)
+        config: xing_config.ini 파일을 파싱하기위한 ConfigParser 객체
     """
-    def __new__(cls):
-        if not hasattr(cls, "_instance"):
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
     def __init__(self):
-        cls = type(self)
-        if not hasattr(cls, "_init"):
-            cls._init = True
-            # 디폴트 값
-            # res 파일 디폴트 경로
-            self.res_directory = "C:\\eBEST\\xingAPI\\Res"
-            # XASession 이벤트 핸들러 디폴트값
-            self.event_XASession = XASessionEvents
-            # XAQuery 이벤트 핸들러 디폴트값
-            self.event_XAQuery = XAQueryEvents
-            # XAReal 이벤트 핸들러 디폴트값
-            self.event_XAReal = XARealEvents
+        self.config = configparser.ConfigParser()
+        if 'config.ini' not in os.listdir():
+            self.config['COM'] = {}
+            self.config['COM']['res_path'] = 'C:\\eBEST\\xingAPI\\Res'
+            with open('xing_config.ini', 'w') as configfile:
+                self.config.write(configfile)
 
-    # res 파일 경로 설정
-    def set_res_directory(self, path):
+    def res_path(self):
         """
-        .res 파일이 위치한 디렉토리 설정
+        xing_config.ini 파일을 읽어 res 파일이 저장된 디렉토리 경로를 리턴한다
 
-        Args:
-            path: .res 파일이 위치한 디렉토리(str)
+        returns:
+            api 구동에 필요한 res파일이 저장된 디렉토리 경로, str 객체
         """
-        self.res_directory = path
+        self.config.read('xing_config.ini')
+        return self.config['COM']['res_path']
 
-    # XASession 이벤트핸들러 지정
-    def set_XASessionEvent(self, event_class):
-        self.event_XASession = event_class
-
-    # XASession 이벤트핸들러 지정
-    def set_XAQueryEvent(self, event_class):
-        self.event_XAQuery = event_class
-
-    # XASession 이벤트핸들러 지정
-    def set_XARealEvent(self, event_class):
-        self.event_XAReal = event_class
 
 
 # 기본적인 이벤트 처리 구조
@@ -147,7 +122,7 @@ class XASession:
     def __init__(self):
         # 이베스트에서 제공하는 com 방식의 api 에 연결
         self.com_obj = win32com.client.Dispatch("XA_Session.XASession")
-        self.event_handler = win32com.client.WithEvents(self.com_obj, Settings().event_XASession)
+        self.event_handler = win32com.client.WithEvents(self.com_obj, XASessionEvents)
         self.event_handler.connect(self, self.com_obj)
 
         self.com_obj.ConnectServer("hts.ebestsec.co.kr", 20001)
@@ -238,7 +213,7 @@ class XAQuery:
     # 이벤트핸들러 지정: XAQueryEvents
     def __init__(self):
         self.com_obj = win32com.client.Dispatch("XA_DataSet.XAQuery")
-        self.event_handler = win32com.client.WithEvents(self.com_obj, Settings().event_XAQuery)
+        self.event_handler = win32com.client.WithEvents(self.com_obj, XAQueryEvents)
         self.event_handler.connect(self, self.com_obj)
         self.receive_state = 0
 
@@ -254,7 +229,7 @@ class XAQuery:
 
         !todo 이거 나중에 수정할 수도 있음
         """
-        res_file = Settings().res_directory + "\\" + tr_code + ".res"
+        res_file = Config().res_path() + "\\" + tr_code + ".res"
         inblock = tr_code + "InBlock"
         self.com_obj.LoadFromResFile(res_file)
         for key, value in attr.items():
@@ -310,14 +285,14 @@ class XAReal:
     set_inlock -> set_outblock -> start
     의 순서로 진행하면 된다.
     EventHandler 를 상속받은 새로운 클래스를 이벤트 핸들러로 지정하여 원하는 작업을 수행한다.
-    !todo 이벤트핸들러 관련 디자인 패턴 개선?
+    !todo 이벤트핸들러 관련 패턴 개선?
 
     Attributes:
         receive_state: 데이터 수신 상태를 확인하기 위한 인스턴스 변수
         event_handler: 실시간 데이터 수신 이벤트를 처리할 이벤트 핸들러 지정(class)
     """
     # 이벤트핸들러 지정: XARealEvents
-    def __init__(self, event_handler = Settings().event_XAReal):
+    def __init__(self, event_handler = XARealEvents):
         self.com_obj = win32com.client.Dispatch("XA_DataSet.XAReal.1")
         self.event_handler = win32com.client.WithEvents(self.com_obj, event_handler)
         self.event_handler.connect(self, self.com_obj)
@@ -328,7 +303,7 @@ class XAReal:
     # inblock 세팅
     # (블록의 필드명, 데이터)
     def set_inblock(self, tr_code, shcode, field = "shcode"):
-        res_file = Settings().res_directory + "\\" + tr_code + ".res"
+        res_file = Config().res_path() + "\\" + tr_code + ".res"
         self.com_obj.LoadFromResFile(res_file)
         if isinstance(shcode, str):
             shcode = [shcode]
@@ -367,3 +342,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    print(os.getcwd())

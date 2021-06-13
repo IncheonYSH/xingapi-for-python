@@ -1,21 +1,11 @@
-from .xing_api import XASession
-from .xing_api import XAReal
-from .xing_api import EventHandler
-from .xing_api import Settings
+from xing_api import XASession
+from xing_api import XAReal
+from xing_api import EventHandler
 import json
-
-# 데이터베이스 접근을 위한 모듈, 클래스(공개불가)
-# from .db import StockInfoTable
-# from .db import KRXRealData
-# from .db import KRXNewsData
-# from .db import KRXIndexData
-
-import pandas as pd
+from db import KRXNewsData
 import multiprocessing
 import datetime
-import time
-import pythoncom
-import win32com.client
+
 
 
 """
@@ -83,9 +73,6 @@ class NewsEvent(EventHandler):
             outblock_field = [outblock_field]
         for i in outblock_field:
             result[i] = self.com_obj.GetFieldData("OutBlock", i)
-
-        # KRXNewsData(): 데이터베이스 접근을 위한 클래스, 공개불가
-        # insert 메서드로 삽입한다
         KRXNewsData().insert(result)
 
 
@@ -102,5 +89,5 @@ class News(multiprocessing.Process):
 
 # 테스트용
 if __name__ == "__main__":
-    pass
-
+    process1 = News()
+    process1.start()
